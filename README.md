@@ -1,5 +1,3 @@
----
-
 ⚠️ **Warning: Do Not Install Yet**
 
 This project is **still under active development** and not ready for public use.  
@@ -30,5 +28,4 @@ Supports OpenAI, Google Gemini, Grok AI, DeepSeek — all with your own API key.
 
 ### 🐧 Linux / macOS
 
-
-Soon !
+Soon!
