@@ -24,8 +24,8 @@ Supports OpenAI, Google Gemini, Grok AI, DeepSeek — all with your own API key.
 - Cross-platform CLI (Windows, macOS, Linux)
 - Commands: `/reset`, `/clear`, `/exit`
 
-## 🚀 Setup Instructions
-
 ### 🐧 Linux / macOS
+
+## 🚀 Setup Instructions
 
 Soon!
