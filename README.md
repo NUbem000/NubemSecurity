@@ -2,12 +2,13 @@
 
 ⚠️ **Warning: Do Not Install Yet**
 
-This project is **still under active development** and is not ready for public use. Please wait **1–2 days** while we complete and polish everything.
+This project is **still under active development** and not ready for public use.  
+Please wait **1–2 days** while the final setup is completed and tested.
 
-I’m working hard to finish it 🙂 — once done, the code and repo will be fully updated and ready.
+I’m working hard to finish it 🙂 — once done, the **code and repo will be updated** with stable features.
 
-If you still want to try it early, that’s totally your choice —  
-but please understand that **@amarokdevs is not responsible** for any issues, bugs, or problems you may face.
+If you still choose to try it early, that’s totally up to you —  
+but please note that **@amarokdevs is not responsible** for any issues, bugs, or errors during this phase.
 
 Thanks for your patience and support 💻🚀
 
