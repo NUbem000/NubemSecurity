@@ -1,3 +1,0 @@
-This project is not an official Kali Linux repository. It is developed and maintained by a single independent developer. Until the official release of KaliGPT, you can integrate a well-known AI API key to get things working.
-
-The code may currently be unstable or incomplete, but future updates will address these issues. For now, simply start the repository, enter your API key, and join the journey!
