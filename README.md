@@ -1,7 +1,7 @@
 ⚠️ **Warning: Do Not Install Yet**
 
 This project is **still under active development** and not ready for public use.  
-Please wait **1–2 days** while the final setup is completed and tested.
+Please wait **1–2 Weaks** while the final setup is completed and tested.
 
 I’m working hard to finish it 🙂 — once done, the **code and repo will be updated** with stable features.
 
