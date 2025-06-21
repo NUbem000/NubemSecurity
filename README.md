@@ -28,4 +28,4 @@ Supports OpenAI, Google Gemini, Grok AI, DeepSeek — all with your own API key.
 
 ## 🚀 Setup Instructions
 
-Soon!
+Let me cook 👨🏻‍🍳
