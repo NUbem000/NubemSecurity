@@ -1,0 +1,557 @@
+openapi: 3.0.0
+info:
+  title: NubemSecurity API
+  description: AI-powered Cybersecurity RAG System API
+  version: 1.0.0
+  contact:
+    name: NubemSecurity Team
+    email: admin@nubemsecurity.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://nubemsecurity-app-wxxe6ekd2q-uc.a.run.app
+    description: Production server
+  - url: http://localhost:8080
+    description: Development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        service:
+          type: string
+        version:
+          type: string
+        message:
+          type: string
+        features:
+          type: object
+          properties:
+            authentication:
+              type: boolean
+            vectorStore:
+              type: boolean
+            rateLimit:
+              type: boolean
+            security:
+              type: boolean
+
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          minLength: 8
+          maxLength: 100
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: number
+
+    QueryRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        k:
+          type: number
+          minimum: 1
+          maximum: 20
+          default: 5
+        filter:
+          type: object
+
+    QueryResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              text:
+                type: string
+              score:
+                type: number
+              metadata:
+                type: object
+        context:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        user:
+          type: string
+
+    Tool:
+      type: object
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        premium:
+          type: boolean
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+
+paths:
+  /:
+    get:
+      summary: Health Check
+      description: Get service health status
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /health:
+    get:
+      summary: Detailed Health Check
+      description: Get detailed health information including checks
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Health status with detailed checks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                  uptime:
+                    type: number
+                  memory:
+                    type: object
+                  vectorStore:
+                    type: boolean
+                  checks:
+                    type: object
+
+  /metrics:
+    get:
+      summary: Prometheus Metrics
+      description: Get Prometheus metrics for monitoring
+      tags:
+        - Monitoring
+      responses:
+        '200':
+          description: Prometheus metrics in text format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /auth/login:
+    post:
+      summary: User Login
+      description: Authenticate user and get access tokens
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh:
+    post:
+      summary: Refresh Token
+      description: Get new access token using refresh token
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  accessToken:
+                    type: string
+        '401':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/query:
+    post:
+      summary: Execute RAG Query
+      description: Query the vector store and get AI-powered responses
+      tags:
+        - API
+      security:
+        - bearerAuth: []
+        - apiKey: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+      responses:
+        '200':
+          description: Query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/tools:
+    get:
+      summary: List Available Tools
+      description: Get list of available cybersecurity tools
+      tags:
+        - API
+      security:
+        - bearerAuth: []
+        - apiKey: []
+        - {}
+      responses:
+        '200':
+          description: Tools list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tool'
+                  total:
+                    type: number
+                  authenticated:
+                    type: boolean
+
+  /api/stats:
+    get:
+      summary: Get System Statistics
+      description: Get system and vector store statistics
+      tags:
+        - API
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  vectorStore:
+                    type: object
+                  server:
+                    type: object
+                  timestamp:
+                    type: string
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/cli/provision:
+    post:
+      summary: Request CLI Provision Token
+      description: Request a token to install CLI on remote machine
+      tags:
+        - CLI
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - machineId
+              properties:
+                machineId:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Provision token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  token:
+                    type: string
+                  tokenId:
+                    type: string
+                  expiresIn:
+                    type: string
+                  installUrl:
+                    type: string
+                  instructions:
+                    type: string
+        '401':
+          description: Admin authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/cli/install:
+    get:
+      summary: Get CLI Installation Script
+      description: Download installation script with embedded configuration
+      tags:
+        - CLI
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Installation script
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Invalid provision token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/cli/stats:
+    get:
+      summary: Get CLI Installation Statistics
+      description: Get statistics about CLI installations
+      tags:
+        - CLI
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Installation statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalInstallations:
+                    type: number
+                  activeTokens:
+                    type: number
+                  installations:
+                    type: array
+                    items:
+                      type: object
+        '401':
+          description: Admin authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/admin/documents:
+    post:
+      summary: Add Document to Vector Store
+      description: Add a new document to the vector store
+      tags:
+        - Admin
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+                - text
+              properties:
+                id:
+                  type: string
+                text:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Document added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  id:
+                    type: string
+        '401':
+          description: Admin authentication required
+        '500':
+          description: Failed to add document
+
+  /api/admin/documents/{id}:
+    delete:
+      summary: Delete Document from Vector Store
+      description: Delete a document from the vector store
+      tags:
+        - Admin
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Document ID
+      responses:
+        '200':
+          description: Document deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  id:
+                    type: string
+        '401':
+          description: Admin authentication required
+        '500':
+          description: Failed to delete document
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Authentication
+    description: Authentication and authorization
+  - name: API
+    description: Main API endpoints
+  - name: CLI
+    description: CLI provisioning and management
+  - name: Admin
+    description: Admin-only endpoints
+  - name: Monitoring
+    description: Monitoring and metrics

@@ -16,6 +16,10 @@ import dotenv from 'dotenv';
 import { promises as fs } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { getDemoCredentials } from './config/demo.js';
+import { setupMonitoring } from './monitoring/setup.js';
+import redisCache from './cache/redis-client.js';
+import { cacheMiddleware } from './cache/middleware.js';
 
 // Load environment variables
 dotenv.config({ path: '/home/david/NubemSecurity/.env' });
@@ -36,6 +40,16 @@ applySecurityMiddleware(app);
 // Additional middleware
 app.use(compression());
 app.use(morgan('combined'));
+
+// Setup monitoring
+setupMonitoring(app);
+
+// Initialize Redis cache
+redisCache.connect().catch(console.error);
+
+// Apply caching to specific routes
+app.use('/api/tools', cacheMiddleware({ ttl: 600 }));
+app.use('/api/stats', cacheMiddleware({ ttl: 60 }));
 
 // Serve static files (installation scripts, etc.)
 app.use('/scripts', express.static(join(__dirname, '../public/scripts')));
@@ -490,6 +504,7 @@ app.use((err, req, res, next) => {
 // ==================== SERVER STARTUP ====================
 
 const server = app.listen(PORT, '0.0.0.0', () => {
+    const demoConfig = getDemoCredentials();
     console.log(`
 ╔════════════════════════════════════════════╗
 ║     NubemSecurity Production Server        ║
@@ -501,10 +516,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 ║  🌐 CORS: Configured                       ║
 ║  📝 Logging: Enabled                       ║
 ╠════════════════════════════════════════════╣
-║  Demo Credentials:                         ║
-║  - Username: admin                         ║
-║  - Password: NubemSec2025!                ║
-║  - API Key: nsk_demo_key_2025             ║
+║  Demo Mode: ${demoConfig.enabled ? 'Enabled' : 'Disabled'}                       ║
+${demoConfig.enabled ? `║  - Username: ${demoConfig.username || 'Not set'}                    ║
+║  - API Key: ${demoConfig.apiKey || 'Not set'}               ║` : ''}
 ╚════════════════════════════════════════════╝
 
 📍 Endpoints:

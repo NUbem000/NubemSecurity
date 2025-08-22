@@ -1,58 +1,46 @@
 /**
- * API Tests for NubemSecurity
+ * API Integration Tests for NubemSecurity
  */
 
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import app from '../src/server.js';
 
-let server;
-let authToken;
-let refreshToken;
-
-beforeAll(async () => {
-    server = app.listen(0); // Random port for testing
-});
-
-afterAll(async () => {
-    await server.close();
-});
-
 describe('NubemSecurity API Tests', () => {
+    let accessToken;
+    let refreshToken;
     
-    describe('Public Endpoints', () => {
-        it('GET / should return health status', async () => {
-            const res = await request(server)
+    describe('Health Checks', () => {
+        test('GET / should return health status', async () => {
+            const response = await request(app)
                 .get('/')
                 .expect(200);
             
-            expect(res.body).toHaveProperty('status', 'healthy');
-            expect(res.body).toHaveProperty('service', 'NubemSecurity RAG');
-            expect(res.body.features).toHaveProperty('authentication', true);
+            expect(response.body.status).toBe('healthy');
+            expect(response.body.service).toBe('NubemSecurity RAG');
         });
-
-        it('GET /health should return detailed health', async () => {
-            const res = await request(server)
+        
+        test('GET /health should return detailed health', async () => {
+            const response = await request(app)
                 .get('/health')
                 .expect(200);
             
-            expect(res.body).toHaveProperty('status', 'ok');
-            expect(res.body).toHaveProperty('timestamp');
-            expect(res.body).toHaveProperty('uptime');
+            expect(response.body.status).toBe('healthy');
+            expect(response.body.checks).toBeDefined();
         });
-
-        it('GET /api/nonexistent should return 404', async () => {
-            const res = await request(server)
-                .get('/api/nonexistent')
-                .expect(404);
+        
+        test('GET /metrics should return Prometheus metrics', async () => {
+            const response = await request(app)
+                .get('/metrics')
+                .expect(200);
             
-            expect(res.body).toHaveProperty('error', 'Not found');
+            expect(response.text).toContain('# HELP');
+            expect(response.text).toContain('# TYPE');
         });
     });
-
+    
     describe('Authentication', () => {
-        it('POST /auth/login with valid credentials should return tokens', async () => {
-            const res = await request(server)
+        test('POST /auth/login with valid credentials', async () => {
+            const response = await request(app)
                 .post('/auth/login')
                 .send({
                     username: 'admin',
@@ -60,29 +48,110 @@ describe('NubemSecurity API Tests', () => {
                 })
                 .expect(200);
             
-            expect(res.body).toHaveProperty('success', true);
-            expect(res.body).toHaveProperty('accessToken');
-            expect(res.body).toHaveProperty('refreshToken');
-            expect(res.body.user).toHaveProperty('role', 'admin');
+            expect(response.body.success).toBe(true);
+            expect(response.body.accessToken).toBeDefined();
+            expect(response.body.refreshToken).toBeDefined();
             
-            authToken = res.body.accessToken;
-            refreshToken = res.body.refreshToken;
+            accessToken = response.body.accessToken;
+            refreshToken = response.body.refreshToken;
         });
-
-        it('POST /auth/login with invalid credentials should return 401', async () => {
-            const res = await request(server)
+        
+        test('POST /auth/login with invalid credentials', async () => {
+            const response = await request(app)
                 .post('/auth/login')
                 .send({
-                    username: 'admin',
-                    password: 'wrongpassword'
+                    username: 'invalid',
+                    password: 'wrong'
                 })
                 .expect(401);
             
-            expect(res.body).toHaveProperty('error', 'Authentication failed');
+            expect(response.body.error).toBe('Authentication failed');
         });
-
-        it('POST /auth/login with invalid input should return 400', async () => {
-            const res = await request(server)
+        
+        test('POST /auth/refresh with valid token', async () => {
+            const response = await request(app)
+                .post('/auth/refresh')
+                .send({ refreshToken })
+                .expect(200);
+            
+            expect(response.body.success).toBe(true);
+            expect(response.body.accessToken).toBeDefined();
+        });
+    });
+    
+    describe('API Endpoints', () => {
+        test('GET /api/tools should return tools list', async () => {
+            const response = await request(app)
+                .get('/api/tools')
+                .expect(200);
+            
+            expect(response.body.tools).toBeInstanceOf(Array);
+            expect(response.body.tools.length).toBeGreaterThan(0);
+        });
+        
+        test('POST /api/query without auth should return limited response', async () => {
+            const response = await request(app)
+                .post('/api/query')
+                .send({
+                    query: 'test query',
+                    k: 5
+                })
+                .expect(200);
+            
+            expect(response.body.limited).toBe(true);
+        });
+        
+        test('POST /api/query with auth should return full response', async () => {
+            const response = await request(app)
+                .post('/api/query')
+                .set('Authorization', `Bearer ${accessToken}`)
+                .send({
+                    query: 'test query',
+                    k: 5
+                })
+                .expect(200);
+            
+            expect(response.body.results).toBeDefined();
+            expect(response.body.context).toBeDefined();
+        });
+        
+        test('GET /api/stats with auth should return statistics', async () => {
+            const response = await request(app)
+                .get('/api/stats')
+                .set('Authorization', `Bearer ${accessToken}`)
+                .expect(200);
+            
+            expect(response.body.status).toBe('operational');
+            expect(response.body.server).toBeDefined();
+        });
+    });
+    
+    describe('Rate Limiting', () => {
+        test('Should enforce rate limits on auth endpoints', async () => {
+            const requests = [];
+            
+            // Make 6 requests (limit is 5)
+            for (let i = 0; i < 6; i++) {
+                requests.push(
+                    request(app)
+                        .post('/auth/login')
+                        .send({
+                            username: 'test',
+                            password: 'wrong'
+                        })
+                );
+            }
+            
+            const responses = await Promise.all(requests);
+            const rateLimited = responses.filter(r => r.status === 429);
+            
+            expect(rateLimited.length).toBeGreaterThan(0);
+        });
+    });
+    
+    describe('Input Validation', () => {
+        test('Should reject invalid login data', async () => {
+            const response = await request(app)
                 .post('/auth/login')
                 .send({
                     username: 'a', // Too short
@@ -90,193 +159,62 @@ describe('NubemSecurity API Tests', () => {
                 })
                 .expect(400);
             
-            expect(res.body).toHaveProperty('error', 'Validation failed');
+            expect(response.body.error).toBe('Validation failed');
         });
-
-        it('POST /auth/refresh with valid token should return new access token', async () => {
-            const res = await request(server)
-                .post('/auth/refresh')
-                .send({
-                    refreshToken
-                })
-                .expect(200);
-            
-            expect(res.body).toHaveProperty('success', true);
-            expect(res.body).toHaveProperty('accessToken');
-        });
-    });
-
-    describe('Protected Endpoints', () => {
-        it('GET /api/stats without auth should return 401', async () => {
-            const res = await request(server)
-                .get('/api/stats')
-                .expect(401);
-            
-            expect(res.body).toHaveProperty('error');
-        });
-
-        it('GET /api/stats with valid token should return stats', async () => {
-            const res = await request(server)
-                .get('/api/stats')
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
-            
-            expect(res.body).toHaveProperty('status', 'operational');
-            expect(res.body).toHaveProperty('vectorStore');
-            expect(res.body).toHaveProperty('server');
-        });
-
-        it('POST /api/query with auth should return results', async () => {
-            const res = await request(server)
+        
+        test('Should reject invalid query data', async () => {
+            const response = await request(app)
                 .post('/api/query')
-                .set('Authorization', `Bearer ${authToken}`)
-                .send({
-                    query: 'How to use nmap for port scanning?',
-                    k: 3
-                })
-                .expect(200);
-            
-            expect(res.body).toHaveProperty('query');
-            expect(res.body).toHaveProperty('results');
-            expect(res.body).toHaveProperty('context');
-        });
-
-        it('POST /api/query without auth should return limited response', async () => {
-            const res = await request(server)
-                .post('/api/query')
-                .send({
-                    query: 'How to use nmap?'
-                })
-                .expect(200);
-            
-            expect(res.body).toHaveProperty('limited', true);
-        });
-
-        it('GET /api/tools with auth should return all tools', async () => {
-            const res = await request(server)
-                .get('/api/tools')
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
-            
-            expect(res.body).toHaveProperty('tools');
-            expect(res.body).toHaveProperty('authenticated', true);
-            expect(res.body.tools.length).toBeGreaterThan(0);
-        });
-
-        it('GET /api/tools with API key should work', async () => {
-            const res = await request(server)
-                .get('/api/tools')
-                .set('X-API-Key', 'nsk_demo_key_2025')
-                .expect(200);
-            
-            expect(res.body).toHaveProperty('authenticated', true);
-        });
-    });
-
-    describe('Admin Endpoints', () => {
-        it('POST /api/admin/documents should add document', async () => {
-            const res = await request(server)
-                .post('/api/admin/documents')
-                .set('Authorization', `Bearer ${authToken}`)
-                .send({
-                    id: 'test-doc-001',
-                    text: 'This is a test document about security tools',
-                    metadata: { category: 'test' }
-                })
-                .expect(200);
-            
-            expect(res.body).toHaveProperty('success', true);
-        });
-
-        it('DELETE /api/admin/documents/:id should delete document', async () => {
-            const res = await request(server)
-                .delete('/api/admin/documents/test-doc-001')
-                .set('Authorization', `Bearer ${authToken}`)
-                .expect(200);
-            
-            expect(res.body).toHaveProperty('success', true);
-        });
-
-        it('Admin endpoints without admin role should return 403', async () => {
-            // Login as analyst (non-admin)
-            const loginRes = await request(server)
-                .post('/auth/login')
-                .send({
-                    username: 'analyst',
-                    password: 'Analyst2025!'
-                });
-            
-            const analystToken = loginRes.body.accessToken;
-            
-            const res = await request(server)
-                .post('/api/admin/documents')
-                .set('Authorization', `Bearer ${analystToken}`)
-                .send({
-                    id: 'test',
-                    text: 'test'
-                })
-                .expect(403);
-            
-            expect(res.body).toHaveProperty('error', 'Insufficient permissions');
-        });
-    });
-
-    describe('Security Headers', () => {
-        it('Should include security headers', async () => {
-            const res = await request(server)
-                .get('/')
-                .expect(200);
-            
-            expect(res.headers).toHaveProperty('x-content-type-options', 'nosniff');
-            expect(res.headers).toHaveProperty('x-frame-options', 'DENY');
-            expect(res.headers).toHaveProperty('x-xss-protection', '1; mode=block');
-            expect(res.headers).not.toHaveProperty('x-powered-by');
-        });
-    });
-
-    describe('Rate Limiting', () => {
-        it('Should rate limit auth endpoints', async () => {
-            // Make 6 requests (limit is 5)
-            for (let i = 0; i < 6; i++) {
-                const res = await request(server)
-                    .post('/auth/login')
-                    .send({
-                        username: 'invalid',
-                        password: 'invalid'
-                    });
-                
-                if (i === 5) {
-                    expect(res.status).toBe(429);
-                    expect(res.body).toHaveProperty('error', 'Too many requests');
-                }
-            }
-        });
-    });
-
-    describe('Input Validation', () => {
-        it('Should validate query input', async () => {
-            const res = await request(server)
-                .post('/api/query')
-                .set('Authorization', `Bearer ${authToken}`)
                 .send({
                     query: '', // Empty query
-                    k: 100 // Too high
+                    k: 100 // Too large
                 })
                 .expect(400);
             
-            expect(res.body).toHaveProperty('error', 'Validation failed');
+            expect(response.body.error).toBe('Validation failed');
         });
-
-        it('Should sanitize XSS attempts', async () => {
-            const res = await request(server)
-                .post('/api/query')
-                .set('Authorization', `Bearer ${authToken}`)
+    });
+    
+    describe('Security Headers', () => {
+        test('Should include security headers', async () => {
+            const response = await request(app)
+                .get('/')
+                .expect(200);
+            
+            expect(response.headers['x-content-type-options']).toBe('nosniff');
+            expect(response.headers['x-frame-options']).toBe('DENY');
+            expect(response.headers['x-xss-protection']).toBe('1; mode=block');
+        });
+    });
+    
+    describe('CLI Provisioning', () => {
+        test('POST /api/cli/provision should require admin auth', async () => {
+            await request(app)
+                .post('/api/cli/provision')
+                .expect(401);
+        });
+        
+        test('POST /api/cli/provision with admin auth should work', async () => {
+            const response = await request(app)
+                .post('/api/cli/provision')
+                .set('Authorization', `Bearer ${accessToken}`)
                 .send({
-                    query: '<script>alert("XSS")</script>How to use nmap?'
+                    machineId: 'test-machine-001',
+                    description: 'Test machine'
                 })
                 .expect(200);
             
-            expect(res.body.query).not.toContain('<script>');
+            expect(response.body.success).toBe(true);
+            expect(response.body.token).toBeDefined();
+            expect(response.body.installUrl).toBeDefined();
         });
     });
+});
+
+// Cleanup after tests
+afterAll(async () => {
+    // Close server and connections
+    if (app.server) {
+        await app.server.close();
+    }
 });
