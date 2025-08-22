@@ -14,9 +14,15 @@ import ora from 'ora';
 import { AIProvider } from './providers/index.js';
 import { SecurityTools } from './tools/index.js';
 import { ConfigManager } from './config/manager.js';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-// Load environment variables
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load environment variables from multiple possible locations
+dotenv.config({ path: join(__dirname, '..', '.env') });  // Project .env
+dotenv.config({ path: '/home/david/.env' });  // User home .env
 
 // ASCII Art Banner
 const banner = `

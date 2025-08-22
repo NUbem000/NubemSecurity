@@ -10,10 +10,25 @@ import morgan from 'morgan';
 import { applySecurityMiddleware, rateLimiters } from './middleware/security.js';
 import jwtManager from './auth/jwt-manager.js';
 import vectorStore from './rag/vector-store-enhanced.js';
+import cliProvisioning from './services/cli-provisioning.js';
 import { z } from 'zod';
+import dotenv from 'dotenv';
+import { promises as fs } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Load environment variables
+dotenv.config({ path: '/home/david/NubemSecurity/.env' });
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+
+// Body parsing middleware (must be before security middleware)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Apply security middleware
 applySecurityMiddleware(app);
@@ -21,6 +36,9 @@ applySecurityMiddleware(app);
 // Additional middleware
 app.use(compression());
 app.use(morgan('combined'));
+
+// Serve static files (installation scripts, etc.)
+app.use('/scripts', express.static(join(__dirname, '../public/scripts')));
 
 // Initialize vector store
 vectorStore.initialize().catch(console.error);
@@ -238,6 +256,159 @@ app.get('/api/stats',
                 message: error.message
             });
         }
+    }
+);
+
+// ==================== CLI PROVISIONING ENDPOINTS ====================
+
+// Request CLI installation token
+app.post('/api/cli/provision',
+    jwtManager.authMiddleware(['admin']),
+    async (req, res) => {
+        try {
+            const { machineId, description } = req.body;
+            
+            if (!machineId) {
+                return res.status(400).json({ error: 'Machine ID required' });
+            }
+            
+            const provisionInfo = cliProvisioning.generateProvisionToken(machineId, {
+                ip: req.ip,
+                requestedBy: req.auth.username,
+                description
+            });
+            
+            res.json({
+                success: true,
+                ...provisionInfo,
+                instructions: `
+To install NubemSecurity CLI on the remote machine, run:
+
+curl -H "Authorization: Bearer ${provisionInfo.token}" \\
+     ${provisionInfo.installUrl} | bash
+                `.trim()
+            });
+        } catch (error) {
+            res.status(500).json({
+                error: 'Failed to generate provision token',
+                message: error.message
+            });
+        }
+    }
+);
+
+// Download installation script with API keys
+app.get('/api/cli/install',
+    async (req, res) => {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Provision token required' });
+            }
+            
+            const token = authHeader.split(' ')[1];
+            const validation = cliProvisioning.validateProvisionToken(token);
+            
+            if (!validation.valid) {
+                return res.status(401).json({ 
+                    error: 'Invalid provision token',
+                    message: validation.error 
+                });
+            }
+            
+            // Mark token as used
+            validation.tokenInfo.used = true;
+            
+            // Get API keys from environment
+            const apiKeys = {
+                openai: process.env.OPENAI_API_KEY,
+                gemini: process.env.GEMINI_API_KEY,
+                anthropic: process.env.ANTHROPIC_API_KEY
+            };
+            
+            // Generate installation script
+            const script = await cliProvisioning.generateInstallScript({
+                apiKeys,
+                serverUrl: `https://nubemsecurity-app-313818478262.us-central1.run.app`,
+                version: '0.1.0'
+            });
+            
+            // Track installation
+            cliProvisioning.trackInstallation(validation.decoded.machineId, {
+                ip: req.ip,
+                tokenId: validation.decoded.tokenId
+            });
+            
+            // Send script
+            res.set('Content-Type', 'text/plain');
+            res.send(script);
+        } catch (error) {
+            res.status(500).json({
+                error: 'Installation failed',
+                message: error.message
+            });
+        }
+    }
+);
+
+// Get CLI package (tar.gz)
+app.get('/api/cli/package',
+    async (req, res) => {
+        try {
+            // For now, send the CLI source as a package
+            const cliPath = join(__dirname, '../cli');
+            const packagePath = join(__dirname, '../dist/nubemsec-cli.tar.gz');
+            
+            // Check if package exists, otherwise create it
+            try {
+                await fs.access(packagePath);
+            } catch {
+                // Create package on the fly
+                const { exec } = await import('child_process');
+                const { promisify } = await import('util');
+                const execAsync = promisify(exec);
+                
+                await execAsync(`cd ${cliPath} && tar -czf ${packagePath} .`);
+            }
+            
+            const packageData = await fs.readFile(packagePath);
+            res.set('Content-Type', 'application/gzip');
+            res.send(packageData);
+        } catch (error) {
+            res.status(500).json({
+                error: 'Failed to get CLI package',
+                message: error.message
+            });
+        }
+    }
+);
+
+// Confirm installation
+app.post('/api/cli/confirm',
+    async (req, res) => {
+        try {
+            const { machineId, version } = req.body;
+            
+            console.log(`CLI installation confirmed: ${machineId} (v${version})`);
+            
+            res.json({
+                success: true,
+                message: 'Installation confirmed'
+            });
+        } catch (error) {
+            res.status(500).json({
+                error: 'Failed to confirm installation'
+            });
+        }
+    }
+);
+
+// Get provisioning stats
+app.get('/api/cli/stats',
+    jwtManager.authMiddleware(['admin']),
+    (req, res) => {
+        const stats = cliProvisioning.getStats();
+        res.json(stats);
     }
 );
 

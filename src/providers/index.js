@@ -24,7 +24,8 @@ export class AIProvider {
                 break;
             
             case 'gemini':
-                this.apiKey = process.env.GOOGLE_AI_API_KEY;
+                // Support multiple environment variable names for Gemini
+                this.apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
                 if (this.apiKey) {
                     this.client = new GoogleGenerativeAI(this.apiKey);
                 }

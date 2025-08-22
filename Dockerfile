@@ -39,6 +39,13 @@ COPY --from=builder /app/data ./data
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
+# Create directories for distribution and public assets
+RUN mkdir -p /app/dist /app/public/scripts
+
+# Copy distribution files
+COPY dist /app/dist
+COPY scripts/install-remote.sh /app/public/scripts/
+
 # Set ownership
 RUN chown -R nodejs:nodejs /app
 

@@ -8,6 +8,7 @@ import mongoSanitize from 'express-mongo-sanitize';
 import xss from 'xss-clean';
 import hpp from 'hpp';
 import cors from 'cors';
+import crypto from 'crypto';
 
 /**
  * Configure CORS with strict settings
@@ -190,10 +191,6 @@ export const applySecurityMiddleware = (app) => {
     
     // CORS configuration
     app.use(configureCors());
-    
-    // Body parsing security
-    app.use(express.json({ limit: '10mb' }));
-    app.use(express.urlencoded({ extended: true, limit: '10mb' }));
     
     // Sanitization
     app.use(sanitization.mongoSanitize);
