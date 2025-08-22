@@ -1,0 +1,42 @@
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/nubemsecurity:production', '-f', 'Dockerfile.production', '.']
+
+  # Push the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/nubemsecurity:production']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'nubemsecurity-app'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/nubemsecurity:production'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--port'
+      - '8080'
+      - '--min-instances'
+      - '1'
+      - '--max-instances'
+      - '100'
+      - '--set-env-vars'
+      - 'NODE_ENV=production,VECTOR_DB_PROVIDER=memory'
+      - '--update-secrets'
+      - 'OPENAI_API_KEY=openai-api-key:latest,JWT_SECRET=jwt-secret:latest,JWT_REFRESH_SECRET=jwt-refresh-secret:latest'
+
+images:
+  - 'gcr.io/$PROJECT_ID/nubemsecurity:production'
+
+timeout: '1200s'

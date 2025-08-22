@@ -1,0 +1,13 @@
+# Simple ChromaDB for Cloud Run
+FROM chromadb/chroma:latest
+
+# Cloud Run expects PORT env var
+ENV PORT=8000
+
+# ChromaDB configuration for Cloud Run
+ENV CHROMA_SERVER_HOST=0.0.0.0
+ENV CHROMA_SERVER_PORT=8000
+ENV CHROMA_SERVER_CORS_ALLOW_ORIGINS='*'
+ENV ANONYMIZED_TELEMETRY=false
+
+# The base image already has the correct entrypoint and command
